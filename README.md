@@ -1,6 +1,6 @@
 # Job Aggregator
 
-A full-stack application that aggregates job postings from Philippine tech company career pages.
+A full-stack application that aggregates job postings from company career pages.
 
 ## Architecture
 
