@@ -1,73 +1,85 @@
-# Job Aggregator
+# CareerCrawler
 
-A full-stack application that aggregates job postings from Philippine tech company career pages.
+CareerCrawler is a full-stack job aggregation app that crawls multiple job sources, stores jobs in PostgreSQL, and serves them through a FastAPI backend and React frontend.
 
-## Architecture
+## Stack
 
-| Component  | Stack                              | Port |
-| ---------- | ---------------------------------- | ---- |
-| **API**    | FastAPI · SQLAlchemy · PostgreSQL  | 8000 |
-| **Client** | React · TypeScript · TanStack Query | 5173 |
-| **Crawler**| Scrapy · psycopg2                  | —    |
-| **DB**     | PostgreSQL 16                      | 5432 |
+| Component | Stack | Port |
+| --- | --- | --- |
+| API | FastAPI, SQLAlchemy, PostgreSQL | 8000 |
+| Client | React, TypeScript, Vite, TanStack Query | 5173 |
+| Crawler | Scrapy, psycopg2 | - |
+| Database | PostgreSQL | 5432 |
+
+## What This Project Is Used For
+
+- Aggregate job listings from multiple sources into one database.
+- Expose searchable and filterable job/company endpoints.
+- Provide a simple UI for browsing jobs.
+- Run crawling repeatedly to keep job data fresh.
 
 ## Prerequisites
 
 - Python 3.11+
 - Node.js 18+
-- PostgreSQL 16 (or Docker)
+- PostgreSQL (local install or Docker)
 
-## Quick Start (Docker)
+## Run Locally
+
+### 1. Configure environment
+
+Create a root `.env` from `.env.example`:
 
 ```bash
 cp .env.example .env
-docker compose up --build
 ```
 
-The API will be available at `http://localhost:8000` and the client at `http://localhost:5173`.
+Set `DATABASE_URL` to your local PostgreSQL instance, for example:
 
-## Local Development
+```env
+DATABASE_URL=postgresql://admin:admin@localhost:5432/job_aggregator
+```
 
-### 1. Database
+### 2. Start PostgreSQL
+
+Use your local PostgreSQL service, or run just DB via Docker:
 
 ```bash
-# Start PostgreSQL (Docker)
 docker compose up postgres -d
 ```
 
-Or use a local PostgreSQL instance and update `.env` accordingly.
-
-### 2. API
+### 3. Run API
 
 ```bash
 cd api
 python -m venv venv
-source venv/bin/activate   # Windows: venv\Scripts\activate
+source venv/Scripts/activate  # Git Bash on Windows
 pip install -r requirements.txt
-
-# Create a .env in /api or export DATABASE_URL
-cp ../.env.example .env
-
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-The API auto-creates all tables on startup.
+API health check:
 
-### 3. Crawler
+- `GET http://localhost:8000/`
+
+### 4. Run crawler
 
 ```bash
 cd crawler
 python -m venv venv
-source venv/bin/activate
+source venv/Scripts/activate
 pip install -r requirements.txt
-
-# Ensure DATABASE_URL is set
-scrapy crawl company_spider
+export DATABASE_URL='postgresql://admin:admin@localhost:5432/job_aggregator'
+scrapy crawl company_spider -L INFO
 ```
 
-The crawler writes directly to PostgreSQL — it does **not** call the API.
+Notes:
 
-### 4. Client
+- The crawler writes directly to PostgreSQL.
+- It does not call the API.
+- You can override `DATABASE_URL` with `export` before crawling.
+
+### 5. Run client
 
 ```bash
 cd client
@@ -79,41 +91,52 @@ Open `http://localhost:5173`.
 
 ## API Endpoints
 
-| Method | Path                     | Description               |
-| ------ | ------------------------ | ------------------------- |
-| GET    | `/companies`             | List all companies        |
-| GET    | `/jobs`                  | List jobs (with filters)  |
-| GET    | `/jobs?search=keyword`   | Search jobs by keyword    |
-| GET    | `/jobs?location=manila`  | Filter jobs by location   |
-| GET    | `/jobs?company_id=1`     | Filter jobs by company    |
-| GET    | `/jobs?page=1&size=20`   | Paginated results         |
-| GET    | `/jobs/{id}`             | Single job detail         |
+| Method | Path | Description |
+| --- | --- | --- |
+| GET | `/companies` | List companies |
+| GET | `/jobs` | List jobs with filters/pagination |
+| GET | `/jobs?search=keyword` | Search jobs |
+| GET | `/jobs?location=manila` | Filter by location |
+| GET | `/jobs?company_id=1` | Filter by company |
+| GET | `/jobs/{id}` | Job details |
 
-## Deploying to Render
+## How To Add Another Crawl Source
 
-### Database
+Update `crawler/jobcrawler/spiders/company_spider.py`.
 
-Create a PostgreSQL instance on Render and note the **Internal Database URL**.
+1. Add a source entry in `SOURCES`:
 
-### API
+```python
+{
+    "name": "Example Source",
+    "career_page_url": "https://example.com",
+    "url": "https://example.com/api/jobs",
+    "parser": "parse_example",
+}
+```
 
-1. Create a **Web Service** pointing to the `api/` directory.
-2. Build command: `pip install -r requirements.txt`
-3. Start command: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-4. Set environment variable `DATABASE_URL` to the Render PostgreSQL URL.
+2. Implement the parser method `parse_example(self, response)` in the spider.
 
-### Client
+3. Parse response data and yield normalized `JobItem` using `_make_item(...)` with:
+- `title`
+- `job_url`
+- `company_name`
+- `career_page_url`
+- `location` (optional but recommended)
+- `employment_type` (optional)
+- `external_id` (recommended for dedupe consistency)
 
-1. Create a **Static Site** pointing to the `client/` directory.
-2. Build command: `npm install && npm run build`
-3. Publish directory: `dist`
-4. Set environment variable `VITE_API_BASE_URL` to the API URL.
+4. If source is HTML (not JSON), set source format and parse links/content accordingly.
 
-### Crawler
+5. Run and verify:
 
-Run the crawler as a **Cron Job** on Render:
-- Command: `cd crawler && scrapy crawl company_spider`
-- Schedule: daily or as needed.
+```bash
+scrapy crawl company_spider -L INFO
+```
+
+6. Validate data in DB and API:
+- `GET /companies`
+- `GET /jobs`
 
 ## License
 
